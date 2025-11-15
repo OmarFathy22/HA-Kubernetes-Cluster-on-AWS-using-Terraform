@@ -18,17 +18,70 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# User data script for master nodes
-# data "template_file" "master_user_data" {
-#   template = file("${path.module}/scripts/master-init.sh")
-# }
+################################################################################
+# CLOUD-INIT USER DATA FOR MASTER NODES
+################################################################################
+data "cloudinit_config" "master_user_data" {
+  count         = var.master_count
+  gzip          = true
+  base64_encode = true
 
-# # User data script for worker nodes
-# data "template_file" "worker_user_data" {
-#   template = file("${path.module}/scripts/worker-init.sh")
-# }
+  # Part 1: Common initialization (runs on all nodes)
+  part {
+    content_type = "text/x-shellscript"
+    content = templatefile("${path.module}/scripts/common-init.sh", {
+      HOSTNAME         = "${var.environment}-k8s-master-${count.index + 1}"
+      IS_LEADER        = tostring(count.index == 0)
+      LB_DNS           = var.load_balancer_dns
+      BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
+    })
+  }
 
-# Master Nodes
+  # Part 2: Master-specific initialization
+  part {
+    content_type = "text/x-shellscript"
+    content = templatefile("${path.module}/scripts/master-init.sh", {
+      HOSTNAME         = "${var.environment}-k8s-master-${count.index + 1}"
+      IS_LEADER        = tostring(count.index == 0)
+      LB_DNS           = var.load_balancer_dns
+      BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
+    })
+  }
+}
+
+################################################################################
+# CLOUD-INIT USER DATA FOR WORKER NODES
+################################################################################
+data "cloudinit_config" "worker_user_data" {
+  count         = var.worker_count
+  gzip          = true
+  base64_encode = true
+
+  # Part 1: Common initialization (runs on all nodes)
+  part {
+    content_type = "text/x-shellscript"
+    content = templatefile("${path.module}/scripts/common-init.sh", {
+      HOSTNAME         = "${var.environment}-k8s-worker-${count.index + 1}"
+      IS_LEADER        = "false"
+      LB_DNS           = var.load_balancer_dns
+      BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
+    })
+  }
+
+  # Part 2: Worker-specific initialization
+  part {
+    content_type = "text/x-shellscript"
+    content = templatefile("${path.module}/scripts/worker-init.sh", {
+      HOSTNAME         = "${var.environment}-k8s-worker-${count.index + 1}"
+      LB_DNS           = var.load_balancer_dns
+      BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
+    })
+  }
+}
+
+################################################################################
+# MASTER NODES
+################################################################################
 resource "aws_instance" "master" {
   count                  = var.master_count
   ami                    = data.aws_ami.ubuntu.id
@@ -36,7 +89,8 @@ resource "aws_instance" "master" {
   key_name               = var.key_name
   subnet_id              = var.public_subnet_ids[count.index % length(var.public_subnet_ids)]
   vpc_security_group_ids = var.master_security_group_ids
-#   user_data              = data.template_file.master_user_data.rendered
+  user_data              = data.cloudinit_config.master_user_data[count.index].rendered
+  iam_instance_profile   = var.iam_instance_profile_name
 
   root_block_device {
     volume_size           = 20
@@ -55,11 +109,19 @@ resource "aws_instance" "master" {
     Name        = "${var.environment}-k8s-master-${count.index + 1}"
     Environment = var.environment
     Role        = "master"
+    IsLeader    = tostring(count.index == 0)
     "kubernetes.io/cluster/${var.environment}" = "owned"
   }
+
+  # Add a small delay between master launches to avoid race conditions
+  depends_on = [
+    # Masters depend on nothing but will launch in order due to count
+  ]
 }
 
-# Worker Nodes
+################################################################################
+# WORKER NODES
+################################################################################
 resource "aws_instance" "worker" {
   count                  = var.worker_count
   ami                    = data.aws_ami.ubuntu.id
@@ -67,10 +129,11 @@ resource "aws_instance" "worker" {
   key_name               = var.key_name
   subnet_id              = var.public_subnet_ids[count.index % length(var.public_subnet_ids)]
   vpc_security_group_ids = var.worker_security_group_ids
-#   user_data              = data.template_file.worker_user_data.rendered
+  user_data              = data.cloudinit_config.worker_user_data[count.index].rendered
+  iam_instance_profile   = var.iam_instance_profile_name
 
   root_block_device {
-    volume_size           = 50
+    volume_size           = 20
     volume_type           = "gp3"
     encrypted             = true
     delete_on_termination = true
@@ -88,9 +151,16 @@ resource "aws_instance" "worker" {
     Role        = "worker"
     "kubernetes.io/cluster/${var.environment}" = "owned"
   }
+
+  # Workers should launch after masters start (not wait for completion)
+  depends_on = [
+    aws_instance.master
+  ]
 }
 
-# Attach master nodes to load balancer target group
+################################################################################
+# ATTACH MASTER NODES TO LOAD BALANCER TARGET GROUP
+################################################################################
 resource "aws_lb_target_group_attachment" "master" {
   count            = var.master_count
   target_group_arn = var.lb_target_group_arn
@@ -98,94 +168,3 @@ resource "aws_lb_target_group_attachment" "master" {
   port             = 6443
 }
 
-################################################################################
-# modules/ec2/variables.tf
-################################################################################
-
-variable "environment" {
-  description = "Environment name"
-  type        = string
-}
-
-variable "public_subnet_ids" {
-  description = "Public subnet IDs"
-  type        = list(string)
-}
-
-variable "master_security_group_ids" {
-  description = "Security group IDs for master nodes"
-  type        = list(string)
-}
-
-variable "worker_security_group_ids" {
-  description = "Security group IDs for worker nodes"
-  type        = list(string)
-}
-
-variable "key_name" {
-  description = "EC2 key pair name"
-  type        = string
-}
-
-variable "master_instance_type" {
-  description = "Master node instance type"
-  type        = string
-  default     = "t3.medium"
-}
-
-variable "worker_instance_type" {
-  description = "Worker node instance type"
-  type        = string
-  default     = "t3.medium"
-}
-
-variable "master_count" {
-  description = "Number of master nodes"
-  type        = number
-  default     = 3
-}
-
-variable "worker_count" {
-  description = "Number of worker nodes"
-  type        = number
-  default     = 2
-}
-
-variable "lb_target_group_arn" {
-  description = "Load balancer target group ARN"
-  type        = string
-}
-
-################################################################################
-# modules/ec2/outputs.tf
-################################################################################
-
-output "master_instance_ids" {
-  description = "Master node instance IDs"
-  value       = aws_instance.master[*].id
-}
-
-output "master_private_ips" {
-  description = "Master node private IPs"
-  value       = aws_instance.master[*].private_ip
-}
-
-output "master_public_ips" {
-  description = "Master node public IPs"
-  value       = aws_instance.master[*].public_ip
-}
-
-output "worker_instance_ids" {
-  description = "Worker node instance IDs"
-  value       = aws_instance.worker[*].id
-}
-
-output "worker_private_ips" {
-  description = "Worker node private IPs"
-  value       = aws_instance.worker[*].private_ip
-}
-
-output "worker_public_ips" {
-  description = "Worker node public IPs"
-  value       = aws_instance.worker[*].public_ip
-}
