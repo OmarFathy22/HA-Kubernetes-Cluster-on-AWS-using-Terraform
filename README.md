@@ -246,15 +246,6 @@ terraform destroy
 **Note**: S3 bucket may need manual cleanup if versioning is enabled or it's not empty
 ---
 
-## 📝 Technical Details
-
-### Security Best Practices
-- ✅ Encrypted EBS volumes (gp3)
-- ✅ IMDSv2 required for instance metadata
-- ✅ Private IP communication via VPC
-- ✅ Security groups with least privilege
-- ✅ No hardcoded credentials
-
 ### Kubernetes Version
 - **v1.33** (latest stable)
 - Containerd runtime with systemd cgroups
