@@ -11,10 +11,10 @@ Production-ready, highly available Kubernetes cluster deployed on AWS using Terr
                     │                       │
             Public Subnet 1         Public Subnet 2
                     │                       │
-        ┌───────────┴───────────┐          │
+        ┌───────────┴───────────┐           │
         │  Network Load Balancer │          │
         │    (API Server :6443)  │          │
-        └───────────┬───────────┘          │
+        └───────────┬───────────┘           │
                     │                       │
         ┌───────────┼───────────────────────┼───────────┐
         │           │                       │           │
