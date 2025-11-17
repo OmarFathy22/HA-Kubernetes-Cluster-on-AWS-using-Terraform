@@ -46,13 +46,13 @@ variable "key_name" {
 variable "master_instance_type" {
   description = "Master node instance type"
   type        = string
-  default     = "t3.medium"
+  default     = "t3.small"
 }
 
 variable "worker_instance_type" {
   description = "Worker node instance type"
   type        = string
-  default     = "t3.medium"
+  default     = "t3.small"
 }
 
 variable "master_count" {
