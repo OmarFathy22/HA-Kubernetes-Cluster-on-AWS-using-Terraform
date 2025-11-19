@@ -1,0 +1,233 @@
+---
+# =============================================================================
+# Kubernetes Master Role: Setup control plane nodes
+# =============================================================================
+# This role handles both leader initialization and follower joining
+# =============================================================================
+
+- name: Display master node information
+  debug:
+    msg: "Configuring master: {{ inventory_hostname }} ({{ master_init_mode }})"
+
+# =============================================================================
+# LEADER MODE: Initialize the first control plane
+# =============================================================================
+
+- name: Leader - Initialize Kubernetes control plane
+  block:
+    - name: Check if cluster is already initialized
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: kubeadm_already_run
+
+    - name: Initialize Kubernetes cluster
+      command: >
+        kubeadm init
+        --control-plane-endpoint "{{ control_plane_endpoint }}"
+        --upload-certs
+        --pod-network-cidr="{{ pod_network_cidr }}"
+      register: kubeadm_init_output
+      when: not kubeadm_already_run.stat.exists
+
+    - name: Save kubeadm init output
+      copy:
+        content: "{{ kubeadm_init_output.stdout }}"
+        dest: "{{ log_dir }}/kubeadm-init.log"
+        mode: '0600'
+      when: kubeadm_init_output is changed
+
+    - name: Create .kube directory for root
+      file:
+        path: /root/.kube
+        state: directory
+        mode: '0755'
+
+    - name: Copy admin.conf to root's kubeconfig
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: yes
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Export KUBECONFIG environment variable
+      lineinfile:
+        path: /root/.bashrc
+        line: 'export KUBECONFIG=/etc/kubernetes/admin.conf'
+        state: present
+
+    - name: Generate bootstrap token
+      command: kubeadm token create --ttl {{ bootstrap_token_ttl }}
+      register: bootstrap_token
+
+    - name: Upload certificates and get certificate key
+      shell: kubeadm init phase upload-certs --upload-certs 2>/dev/null | tail -n1
+      register: certificate_key
+
+    - name: Get CA certificate hash
+      shell: |
+        openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | \
+        openssl rsa -pubin -outform der 2>/dev/null | \
+        openssl dgst -sha256 -hex | sed 's/^.* //'
+      register: ca_cert_hash
+
+    - name: Create bootstrap artifacts file
+      copy:
+        content: |
+          TOKEN={{ bootstrap_token.stdout }}
+          CERT_KEY={{ certificate_key.stdout }}
+          CA_HASH={{ ca_cert_hash.stdout }}
+        dest: /root/bootstrap_artifacts.txt
+        mode: '0600'
+
+    - name: Upload bootstrap artifacts to S3
+      command: >
+        aws s3 cp /root/bootstrap_artifacts.txt
+        s3://{{ s3_bucket_name }}/bootstrap_artifacts.txt
+        --only-show-errors
+      register: s3_upload
+      failed_when: false
+
+    - name: Display S3 upload status
+      debug:
+        msg: "Bootstrap artifacts {{ 'uploaded to' if s3_upload.rc == 0 else 'FAILED to upload to' }} S3"
+
+    - name: Wait for API server to be ready
+      wait_for:
+        host: "{{ ansible_default_ipv4.address }}"
+        port: 6443
+        delay: 10
+        timeout: 300
+
+    - name: Install Calico CNI plugin
+      command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml
+      register: calico_install
+      changed_when: "'created' in calico_install.stdout or 'configured' in calico_install.stdout"
+
+    - name: Wait for Calico pods to be ready
+      shell: kubectl get pods -n kube-system -l k8s-app=calico-node --no-headers | grep -v Running | wc -l
+      register: calico_pods
+      until: calico_pods.stdout == "0"
+      retries: 30
+      delay: 10
+      changed_when: false
+
+    - name: Display cluster initialization status
+      debug:
+        msg: |
+          ========================================
+          Kubernetes Control Plane Initialized!
+          ========================================
+          Token: {{ bootstrap_token.stdout }}
+          CA Hash: {{ ca_cert_hash.stdout }}
+          Certificate Key: {{ certificate_key.stdout }}
+          ========================================
+
+  when: master_init_mode == "leader"
+
+# =============================================================================
+# FOLLOWER MODE: Join additional control plane nodes
+# =============================================================================
+
+- name: Follower - Join control plane
+  block:
+    - name: Check if node is already part of cluster
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf_exists
+
+    - name: Wait for bootstrap artifacts in S3
+      command: >
+        aws s3 cp s3://{{ s3_bucket_name }}/bootstrap_artifacts.txt
+        /root/bootstrap_artifacts.txt
+        --only-show-errors
+      register: s3_download
+      until: s3_download.rc == 0
+      retries: 60
+      delay: 10
+      when: not kubelet_conf_exists.stat.exists
+
+    - name: Read bootstrap artifacts
+      slurp:
+        src: /root/bootstrap_artifacts.txt
+      register: bootstrap_artifacts_content
+      when: not kubelet_conf_exists.stat.exists
+
+    - name: Parse bootstrap artifacts (robust dict from key=value lines)
+      set_fact:
+        bootstrap_data: >-
+          {{ dict(
+               (bootstrap_artifacts_content.content | b64decode | string | trim).splitlines()
+               | select
+               | map('split', '=', 1)
+               | list
+             ) }}
+      when: not kubelet_conf_exists.stat.exists
+
+    - name: Join control plane cluster
+      command: >
+        kubeadm join {{ control_plane_endpoint }}
+        --token {{ bootstrap_data.TOKEN }}
+        --discovery-token-ca-cert-hash sha256:{{ bootstrap_data.CA_HASH }}
+        --control-plane
+        --certificate-key {{ bootstrap_data.CERT_KEY }}
+      register: kubeadm_join_output
+      when: not kubelet_conf_exists.stat.exists
+
+    - name: Save kubeadm join output
+      copy:
+        content: "{{ kubeadm_join_output.stdout }}"
+        dest: "{{ log_dir }}/kubeadm-join.log"
+        mode: '0600'
+      when: kubeadm_join_output is changed
+
+    - name: Create .kube directory for root
+      file:
+        path: /root/.kube
+        state: directory
+        mode: '0755'
+
+    - name: Copy admin.conf to root's kubeconfig
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: yes
+        owner: root
+        group: root
+        mode: '0600'
+      when: not kubelet_conf_exists.stat.exists
+
+    - name: Export KUBECONFIG environment variable
+      lineinfile:
+        path: /root/.bashrc
+        line: 'export KUBECONFIG=/etc/kubernetes/admin.conf'
+        state: present
+
+    - name: Display join status
+      debug:
+        msg: "Master {{ inventory_hostname }} successfully joined the cluster"
+      when: not kubelet_conf_exists.stat.exists
+
+  when: master_init_mode == "follower"
+
+# =============================================================================
+# COMMON: Verify node status
+# =============================================================================
+
+- name: Wait for node to be ready
+  command: kubectl get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+  register: node_ready
+  until: node_ready.stdout == "True"
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Display node status
+  command: kubectl get nodes
+  register: nodes_status
+  changed_when: false
+
+- name: Show current cluster nodes
+  debug:
+    msg: "{{ nodes_status.stdout_lines }}"

@@ -1,0 +1,32 @@
+---
+# Variables specific to WORKER nodes
+
+# Worker node role
+node_role: "worker"
+
+# Worker node labels (applied after joining)
+worker_node_labels:
+  node-role.kubernetes.io/worker: ""
+  workload: "general"
+
+# kubeadm join configuration
+kubeadm_join_extra_args: ""
+
+# Maximum pods per node
+max_pods: "110"
+
+# Kubelet configuration
+kubelet_extra_args:
+  max-pods: "{{ max_pods }}"
+  # node-status-update-frequency: 10s
+
+# Worker-specific resource limits
+kubelet_system_reserved:
+  cpu: "100m"
+  memory: "100Mi"
+  ephemeral-storage: "1Gi"
+
+kubelet_kube_reserved:
+  cpu: "100m"
+  memory: "100Mi"
+  ephemeral-storage: "1Gi"

@@ -1,0 +1,9 @@
+# Template for containerd 1.7+ to work with kubeadm 1.33
+version = 2
+
+[plugins."io.containerd.grpc.v1.cri"]
+  sandbox_image = "registry.k8s.io/pause:3.9"
+  enable_cri_v1 = true   # ← this line fixes your exact error
+
+[plugins."io.containerd.grpc.v1.cri".cgroup]
+  SystemdCgroup = true

@@ -1,0 +1,42 @@
+---
+# Variables applied to ALL nodes (masters and workers)
+
+# Kubernetes Configuration
+kubernetes_version: "1.33"
+kubernetes_version_full: "1.33.0-1.1"  # Exact version for apt
+
+# Load Balancer DNS (replace with your actual LB DNS)
+load_balancer_dns: "production-k8s-api-lb-29f1add1c39b064d.elb.us-east-1.amazonaws.com"
+control_plane_endpoint: "production-k8s-api-lb-29f1add1c39b064d.elb.us-east-1.amazonaws.com:6443"
+
+# S3 Bucket for bootstrap artifacts (replace with your bucket name)
+s3_bucket_name: "production-k8s-bootstrap-3535026c"
+
+# Networking
+pod_network_cidr: "192.168.0.0/16"
+service_cidr: "10.96.0.0/12"
+
+# Container Runtime
+containerd_version: "1.7"
+
+# CNI Plugin
+cni_plugin: "calico"
+calico_version: "v3.27.3"
+
+# System Settings
+swap_disabled: true
+ipv4_forward_enabled: true
+
+# Package repositories
+kubernetes_apt_repository: "https://pkgs.k8s.io/core:/stable:/v1.33/deb/"
+docker_apt_repository: "https://download.docker.com/linux/ubuntu"
+
+# SSH Settings
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+# Retry settings
+package_install_retries: 3
+package_install_delay: 10
+
+# Log settings
+log_dir: "/var/log/kubernetes-setup"

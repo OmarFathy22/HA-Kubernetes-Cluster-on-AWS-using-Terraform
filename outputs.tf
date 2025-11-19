@@ -51,3 +51,7 @@ output "worker_public_ips" {
   description = "Worker node public IPs"
   value       = module.ec2_instances.worker_public_ips
 }
+
+output "s3_bucket_name" {
+  value = aws_s3_bucket.k8s_bootstrap.id
+}

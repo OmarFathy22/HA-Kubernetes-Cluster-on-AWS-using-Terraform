@@ -1,0 +1,44 @@
+---
+# Variables specific to MASTER nodes
+
+# Master node role
+node_role: "master"
+
+# Control plane endpoint
+control_plane_endpoint: "{{ load_balancer_dns }}:6443"
+
+# kubeadm configuration
+kubeadm_init_extra_args: ""
+kubeadm_join_extra_args: ""
+
+# Upload certificates to cluster (needed for HA)
+upload_certs: true
+
+# Certificate key ttl
+certificate_key_ttl: "24h"
+
+# Token ttl
+bootstrap_token_ttl: "24h"
+
+# etcd data directory
+etcd_data_dir: "/var/lib/etcd"
+
+# API server settings
+api_server_extra_args: {}
+  # audit-log-path: /var/log/kubernetes/audit.log
+  # audit-log-maxage: "30"
+
+# Controller manager settings
+controller_manager_extra_args: {}
+
+# Scheduler settings
+scheduler_extra_args: {}
+
+# Master node taints (prevent pods from scheduling on masters)
+master_node_taints:
+  - key: "node-role.kubernetes.io/control-plane"
+    effect: "NoSchedule"
+
+# Kubectl configuration directory
+kubectl_config_dir: "{{ ansible_env.HOME }}/.kube"
+kubectl_config_file: "{{ kubectl_config_dir }}/config"

@@ -1,0 +1,102 @@
+---
+# =============================================================================
+# Main Playbook: Deploy HA Kubernetes Cluster
+# =============================================================================
+# This is the master playbook that orchestrates the entire cluster setup
+#
+# Usage:
+#   ansible-playbook playbooks/site.yml
+#
+# Or run specific parts:
+#   ansible-playbook playbooks/site.yml --tags "prepare"
+#   ansible-playbook playbooks/site.yml --tags "masters"
+#   ansible-playbook playbooks/site.yml --tags "workers"
+# =============================================================================
+
+- name: "=== PHASE 1: Prepare All Nodes ==="
+  hosts: k8s_cluster
+  become: true
+  gather_facts: true      # changed it to true
+  tags:
+    - prepare
+    - always
+  roles:
+    - role: common
+      tags: common
+
+- name: "=== PHASE 2: Initialize First Master (Leader) ==="
+  hosts: masters[0]
+  become: true
+  gather_facts: false
+  tags:
+    - masters
+    - init
+  roles:
+    - role: kubernetes-master
+      vars:
+        master_init_mode: "leader"
+      tags: master-init
+
+- name: "=== PHASE 3: Join Additional Masters ==="
+  hosts: masters[1:]
+  become: true
+  gather_facts: false
+  serial: 1  # Join one master at a time
+  tags:
+    - masters
+    - join
+  roles:
+    - role: kubernetes-master
+      vars:
+        master_init_mode: "follower"
+      tags: master-join
+
+- name: "=== PHASE 4: Join Worker Nodes ==="
+  hosts: workers
+  become: true
+  gather_facts: false
+  serial: 2  # Join two workers at a time
+  tags:
+    - workers
+  roles:
+    - role: kubernetes-worker
+      tags: worker-join
+      
+- name: "=== FINAL: Cluster Verification ==="
+  hosts: masters[0]
+  become: true
+  gather_facts: false
+  tags:
+    - verify
+    - always
+  tasks:
+    - name: Wait for all nodes to be ready
+      shell: kubectl get nodes --no-headers | grep -v NotReady | wc -l
+      register: ready_nodes
+      until: ready_nodes.stdout|int == groups['k8s_cluster']|length
+      retries: 30
+      delay: 10
+      changed_when: false
+
+    - name: Display cluster status
+      shell: kubectl get nodes -o wide
+      register: cluster_status
+      changed_when: false
+
+    - name: Show cluster information
+      debug:
+        msg: |
+          ========================================
+          Cluster Setup Complete!
+          ========================================
+          {{ cluster_status.stdout }}
+          ========================================
+          
+          Access your cluster:
+          1. Copy kubeconfig from master01: ~/.kube/config
+          2. Or SSH to master01 and run kubectl commands
+          
+          Next steps:
+          - Install add-ons: ansible-playbook playbooks/site.yml --tags addons
+          - Deploy your first app!
+          ========================================

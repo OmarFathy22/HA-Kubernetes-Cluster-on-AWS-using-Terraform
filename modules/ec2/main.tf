@@ -21,63 +21,63 @@ data "aws_ami" "ubuntu" {
 ################################################################################
 # CLOUD-INIT USER DATA FOR MASTER NODES
 ################################################################################
-data "cloudinit_config" "master_user_data" {
-  count         = var.master_count
-  gzip          = true
-  base64_encode = true
+# data "cloudinit_config" "master_user_data" {
+#   count         = var.master_count
+#   gzip          = true
+#   base64_encode = true
 
-  # Part 1: Common initialization (runs on all nodes)
-  part {
-    content_type = "text/x-shellscript"
-    content = templatefile("${path.module}/scripts/common-init.sh", {
-      HOSTNAME         = "${var.environment}-k8s-master-${count.index + 1}"
-      IS_LEADER        = tostring(count.index == 0)
-      LB_DNS           = var.load_balancer_dns
-      BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
-    })
-  }
+#   # Part 1: Common initialization (runs on all nodes)
+#   part {
+#     content_type = "text/x-shellscript"
+#     content = templatefile("${path.module}/scripts/common-init.sh", {
+#       HOSTNAME         = "${var.environment}-k8s-master-${count.index + 1}"
+#       IS_LEADER        = tostring(count.index == 0)
+#       LB_DNS           = var.load_balancer_dns
+#       BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
+#     })
+#   }
 
-  # Part 2: Master-specific initialization
-  part {
-    content_type = "text/x-shellscript"
-    content = templatefile("${path.module}/scripts/master-init.sh", {
-      HOSTNAME         = "${var.environment}-k8s-master-${count.index + 1}"
-      IS_LEADER        = tostring(count.index == 0)
-      LB_DNS           = var.load_balancer_dns
-      BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
-    })
-  }
-}
+#   # Part 2: Master-specific initialization
+#   part {
+#     content_type = "text/x-shellscript"
+#     content = templatefile("${path.module}/scripts/master-init.sh", {
+#       HOSTNAME         = "${var.environment}-k8s-master-${count.index + 1}"
+#       IS_LEADER        = tostring(count.index == 0)
+#       LB_DNS           = var.load_balancer_dns
+#       BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
+#     })
+#   }
+# }
 
 ################################################################################
 # CLOUD-INIT USER DATA FOR WORKER NODES
 ################################################################################
-data "cloudinit_config" "worker_user_data" {
-  count         = var.worker_count
-  gzip          = true
-  base64_encode = true
+# data "cloudinit_config" "worker_user_data" {
+#   count         = var.worker_count
+#   gzip          = true
+#   base64_encode = true
 
-  # Part 1: Common initialization (runs on all nodes)
-  part {
-    content_type = "text/x-shellscript"
-    content = templatefile("${path.module}/scripts/common-init.sh", {
-      HOSTNAME         = "${var.environment}-k8s-worker-${count.index + 1}"
-      IS_LEADER        = "false"
-      LB_DNS           = var.load_balancer_dns
-      BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
-    })
-  }
+#   # Part 1: Common initialization (runs on all nodes)
+#   part {
+#     content_type = "text/x-shellscript"
+#     content = templatefile("${path.module}/scripts/common-init.sh", {
+#       HOSTNAME         = "${var.environment}-k8s-worker-${count.index + 1}"
+#       IS_LEADER        = "false"
+#       LB_DNS           = var.load_balancer_dns
+#       BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
+#     })
+#   }
 
   # Part 2: Worker-specific initialization
-  part {
-    content_type = "text/x-shellscript"
-    content = templatefile("${path.module}/scripts/worker-init.sh", {
-      HOSTNAME         = "${var.environment}-k8s-worker-${count.index + 1}"
-      LB_DNS           = var.load_balancer_dns
-      BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
-    })
-  }
-}
+#   part {
+#     content_type = "text/x-shellscript"
+#     content = templatefile("${path.module}/scripts/worker-init.sh", {
+#       HOSTNAME         = "${var.environment}-k8s-worker-${count.index + 1}"
+#       LB_DNS           = var.load_balancer_dns
+#       BOOTSTRAP_BUCKET = var.bootstrap_s3_bucket
+#     })
+#   }
+# }
 
 ################################################################################
 # MASTER NODES
@@ -89,7 +89,7 @@ resource "aws_instance" "master" {
   key_name               = var.key_name
   subnet_id              = var.public_subnet_ids[count.index % length(var.public_subnet_ids)]
   vpc_security_group_ids = var.master_security_group_ids
-  user_data              = data.cloudinit_config.master_user_data[count.index].rendered
+  # user_data              = data.cloudinit_config.master_user_data[count.index].rendered
   iam_instance_profile   = var.iam_instance_profile_name
 
   root_block_device {
@@ -129,7 +129,7 @@ resource "aws_instance" "worker" {
   key_name               = var.key_name
   subnet_id              = var.public_subnet_ids[count.index % length(var.public_subnet_ids)]
   vpc_security_group_ids = var.worker_security_group_ids
-  user_data              = data.cloudinit_config.worker_user_data[count.index].rendered
+  # user_data              = data.cloudinit_config.worker_user_data[count.index].rendered
   iam_instance_profile   = var.iam_instance_profile_name
 
   root_block_device {

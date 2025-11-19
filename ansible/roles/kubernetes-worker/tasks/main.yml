@@ -1,0 +1,86 @@
+---
+# =============================================================================
+# Kubernetes Worker Role: Join worker nodes to the cluster
+# =============================================================================
+
+- name: Display worker node information
+  debug:
+    msg: "Configuring worker: {{ inventory_hostname }}"
+
+- name: Check if node is already part of cluster
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf_exists
+
+- name: Join cluster as worker node
+  block:
+    - name: Wait for bootstrap artifacts in S3
+      command: >
+        aws s3 cp s3://{{ s3_bucket_name }}/bootstrap_artifacts.txt
+        /root/bootstrap_artifacts.txt
+        --only-show-errors
+      register: s3_download
+      until: s3_download.rc == 0
+      retries: 60
+      delay: 10
+
+    - name: Read bootstrap artifacts
+      slurp:
+        src: /root/bootstrap_artifacts.txt
+      register: bootstrap_artifacts_content
+
+    - name: Parse bootstrap artifacts (robust dict from key=value lines)
+      set_fact:
+        bootstrap_data: >-
+          {{ dict(
+               (bootstrap_artifacts_content.content | b64decode | string | trim).splitlines()
+               | select
+               | map('split', '=', 1)
+               | list
+             ) }}
+      when: not kubelet_conf_exists.stat.exists
+
+    - name: Join cluster as worker
+      command: >
+        kubeadm join {{ load_balancer_dns }}:6443
+        --token {{ bootstrap_data.TOKEN }}
+        --discovery-token-ca-cert-hash sha256:{{ bootstrap_data.CA_HASH }}
+      register: kubeadm_join_output
+      when: not kubelet_conf_exists.stat.exists
+
+    - name: Save kubeadm join output
+      copy:
+        content: "{{ kubeadm_join_output.stdout }}"
+        dest: "{{ log_dir }}/kubeadm-join.log"
+        mode: '0600'
+
+    - name: Display join status
+      debug:
+        msg: "Worker {{ inventory_hostname }} successfully joined the cluster"
+
+  when: not kubelet_conf_exists.stat.exists
+
+- name: Label worker node (run from master)
+  command: kubectl label node {{ inventory_hostname }} {{ item.key }}={{ item.value }} --overwrite
+  loop: "{{ worker_node_labels | dict2items }}"
+  delegate_to: "{{ groups['masters'][0] }}"
+  when: not kubelet_conf_exists.stat.exists
+
+- name: Wait for node to be ready
+  command: kubectl get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+  register: node_ready
+  until: node_ready.stdout == "True"
+  retries: 30
+  delay: 10
+  changed_when: false
+  delegate_to: "{{ groups['masters'][0] }}"
+
+- name: Verify worker node status
+  command: kubectl get node {{ inventory_hostname }} -o wide
+  register: worker_status
+  changed_when: false
+  delegate_to: "{{ groups['masters'][0] }}"
+
+- name: Display worker node information
+  debug:
+    msg: "{{ worker_status.stdout_lines }}"
