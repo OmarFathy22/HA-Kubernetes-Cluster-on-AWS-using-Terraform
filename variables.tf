@@ -41,6 +41,7 @@ variable "allowed_ssh_ips" {
 variable "key_name" {
   description = "EC2 key pair name"
   type        = string
+  default = "k8s-cluster-key"
 }
 
 variable "master_instance_type" {
