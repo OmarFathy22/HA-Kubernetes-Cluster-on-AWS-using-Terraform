@@ -48,4 +48,5 @@ jobs:
           ansible-playbook -i inventory/hosts.ini site.yml
 
       - name: Success
-        run: echo "✅ Cluster deployed! Endpoint: https://$(cd terraform && terraform output -raw load_balancer_dns):6443"
+        run: |
+          echo "✅ Cluster deployed! Endpoint: https://$(cd terraform && terraform output -raw load_balancer_dns):6443"
