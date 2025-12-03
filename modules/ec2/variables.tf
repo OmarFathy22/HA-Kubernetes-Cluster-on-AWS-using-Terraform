@@ -25,6 +25,7 @@ variable "worker_security_group_ids" {
 variable "key_name" {
   description = "EC2 key pair name"
   type        = string
+  default = "k8s-cluster-key"
 }
 
 variable "master_instance_type" {
