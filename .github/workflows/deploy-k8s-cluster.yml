@@ -1,0 +1,52 @@
+name: Deploy HA Kubernetes Cluster
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::919586551447:role/GitHubActionsKubernetesRole  
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform Init & Apply
+        working-directory: ./terraform
+        run: |
+          terraform init -upgrade
+          terraform apply -auto-approve
+
+      - name: Generate Ansible Inventory
+        run: |
+          cd ansible
+          chmod +x generate-inventory.sh
+          ./generate-inventory.sh ../terraform
+
+      - name: Install Ansible
+        run: |
+          python3 -m pip install --user ansible boto3 botocore
+          ansible-galaxy collection install community.general ansible.posix
+
+      - name: Run Ansible Playbook
+        working-directory: ./ansible
+        run: |
+          ansible-playbook -i inventory/hosts.ini site.yml
+
+      - name: Success
+        run: |
+          echo "✅ Cluster deployed! Endpoint: https://$(cd terraform && terraform output -raw load_balancer_dns):6443"
