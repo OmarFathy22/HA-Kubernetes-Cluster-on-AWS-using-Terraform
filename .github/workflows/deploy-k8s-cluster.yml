@@ -18,7 +18,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: us-east-1
-          role-to-assume: arn:aws:iam::YOUR_ACCOUNT_ID:role/GitHubActionsKubernetesRole  # Replace with your 12-digit AWS ID
+          role-to-assume: arn:aws:iam::919586551447:role/GitHubActionsKubernetesRole  
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
