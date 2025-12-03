@@ -26,7 +26,6 @@ jobs:
           terraform_version: 1.9.0
 
       - name: Terraform Init & Apply
-        working-directory: ./terraform
         run: |
           terraform init -upgrade
           terraform apply -auto-approve
@@ -35,7 +34,7 @@ jobs:
         run: |
           cd ansible
           chmod +x generate-inventory.sh
-          ./generate-inventory.sh ../terraform
+          ./generate-inventory.sh ".."
 
       - name: Install Ansible
         run: |

@@ -20,7 +20,6 @@ jobs:
           role-to-assume: arn:aws:iam::919586551447:role/GitHubActionsKubernetesRole  
 
       - name: Terraform Destroy
-        working-directory: ./terraform
         run: |
           terraform init
           terraform destroy -auto-approve
