@@ -19,13 +19,13 @@ on:
         type: choice
         options: ['t3.micro', 't3.small']
         default: 't3.small'
-        description: "EC2 instance type"
+        description: "Master instance type"
 
       worker_instance_type:
         type: choice
         options: ['t3.micro', 't3.small']
         default: 't3.small'
-        description: "EC2 instance type"  
+        description: "Worker instance type"  
 
       aws_region:
         type: choice
