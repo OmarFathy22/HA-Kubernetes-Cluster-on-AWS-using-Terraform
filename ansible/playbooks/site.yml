@@ -108,7 +108,7 @@
           
           🚀 ACCESS YOUR DASHBOARD (Headlamp)
           -----------------------------------
-          LINK:  https://{{ ansible_host }}:30000
+          LINK:  http://{{ ansible_host }}:30000
           
           (Get the token from the 'headlamp-token' Artifact)
           ========================================
