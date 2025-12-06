@@ -60,3 +60,4 @@ jobs:
       - name: Success
         run: |
           echo "✅ Cluster deployed Successfully!"
+          echo "� CHECK THE LOGS ABOVE FOR DASHBOARD LINK & TOKEN 👇"
