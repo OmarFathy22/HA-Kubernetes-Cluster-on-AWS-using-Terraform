@@ -93,7 +93,7 @@
     - name: Fetch Headlamp Token to Controller
       fetch:
         src: "/tmp/headlamp_token.txt"
-        dest: "headlamp_token.txt"
+        dest: "{{ playbook_dir }}/../headlamp_token.txt"
         flat: yes
       changed_when: false
 
@@ -106,9 +106,6 @@
           {{ cluster_status.stdout }}
           ========================================
           
-          🚀 ACCESS YOUR DASHBOARD (Headlamp)
-          -----------------------------------
-          LINK:  http://{{ ansible_host }}:30000
+          🚀 DASHBOARD: http://{{ ansible_host }}:30000
           
-          (Get the token from the 'headlamp-token' Artifact)
           ========================================
