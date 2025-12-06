@@ -1,0 +1,32 @@
+---
+- name: Deploy Headlamp
+  shell: kubectl apply -f https://raw.githubusercontent.com/kinvolk/headlamp/main/kubernetes-headlamp.yaml
+  register: deploy_headlamp
+  until: deploy_headlamp is success
+  retries: 5
+  delay: 10
+
+- name: Expose Headlamp via NodePort 30000
+  shell: |
+    kubectl patch service headlamp -n kube-system --type='json' -p='[{"op": "replace", "path": "/spec/type", "value": "NodePort"}, {"op": "add", "path": "/spec/ports/0/nodePort", "value": 30000}]'
+  ignore_errors: yes # Might already be patched
+
+- name: Create ServiceAccount for Headlamp Admin
+  shell: |
+    kubectl -n kube-system create serviceaccount headlamp-admin --dry-run=client -o yaml | kubectl apply -f -
+
+- name: Create ClusterRoleBinding for Headlamp Admin
+  shell: |
+    kubectl create clusterrolebinding headlamp-admin --clusterrole=cluster-admin --serviceaccount=kube-system:headlamp-admin --dry-run=client -o yaml | kubectl apply -f -
+
+- name: Create Secret for Headlamp Admin (Long-lived token)
+  shell: |
+    kubectl -n kube-system apply -f - <<EOF
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: headlamp-admin-token
+      annotations:
+        kubernetes.io/service-account.name: headlamp-admin
+    type: kubernetes.io/service-account-token
+    EOF

@@ -84,6 +84,7 @@ module "ec2_instances" {
 # S3 bucket for bootstrap artifacts (kubeadm token, cert key)
 resource "aws_s3_bucket" "k8s_bootstrap" {
   bucket = "${var.environment}-k8s-bootstrap-${random_id.bucket_id.hex}"
+  force_destroy = true
 
   tags = {
     Name        = "${var.environment}-k8s-bootstrap"

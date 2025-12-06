@@ -47,6 +47,15 @@
     - role: kubernetes-worker
       tags: worker-join
       
+- name: "=== PHASE 5: Deploy Add-ons ==="
+  hosts: masters[0]
+  become: true
+  tags:
+    - addons
+    - headlamp
+  roles:
+    - role: headlamp
+
 - name: "=== FINAL: Cluster Verification ==="
   hosts: masters[0]
   become: true
@@ -68,6 +77,26 @@
       register: cluster_status
       changed_when: false
 
+    - name: Get Headlamp Admin Token
+      shell: kubectl -n kube-system get secret headlamp-admin-token -o jsonpath='{.data.token}' | base64 -d
+      register: headlamp_token
+      changed_when: false
+      ignore_errors: true
+
+    - name: Save Headlamp Token to file (remote)
+      copy:
+        content: "{{ headlamp_token.stdout }}"
+        dest: "/tmp/headlamp_token.txt"
+        mode: '0600'
+      changed_when: false
+
+    - name: Fetch Headlamp Token to Controller
+      fetch:
+        src: "/tmp/headlamp_token.txt"
+        dest: "{{ playbook_dir }}/../headlamp_token.txt"
+        flat: yes
+      changed_when: false
+
     - name: Show cluster information
       debug:
         msg: |
@@ -77,11 +106,4 @@
           {{ cluster_status.stdout }}
           ========================================
           
-          Access your cluster:
-          1. Copy kubeconfig from master01: ~/.kube/config
-          2. Or SSH to master01 and run kubectl commands
-          
-          Next steps:
-          - Install add-ons: ansible-playbook playbooks/site.yml --tags addons
-          - Deploy your first app!
-          ========================================
+          🚀 DASHBOARD: http://{{ ansible_host }}:30000/c/main/token
