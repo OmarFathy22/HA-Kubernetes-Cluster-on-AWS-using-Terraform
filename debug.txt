@@ -1,2 +1,0 @@
-cat /var/log/k8s-common-init.log
-cat /var/log/k8s-master-init.log

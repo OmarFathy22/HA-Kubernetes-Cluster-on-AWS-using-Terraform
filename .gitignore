@@ -60,3 +60,4 @@ Thumbs.db
 # Misc
 *.log
 *.tmp
+s3_backend_init.sh
